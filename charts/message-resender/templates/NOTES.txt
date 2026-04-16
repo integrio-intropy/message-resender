@@ -1,0 +1,63 @@
+Thank you for installing {{ .Chart.Name }}!
+
+Release:   {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}
+Broker:    {{ .Values.broker.type }}
+
+{{- if eq .Values.broker.type "rabbitmq" }}
+{{- if and (not .Values.broker.rabbitmq.existingSecret) (not .Values.broker.rabbitmq.dsn) }}
+
+WARNING: No RabbitMQ DSN configured!
+  Set broker.rabbitmq.dsn or broker.rabbitmq.existingSecret in your values.
+  The operator will fail to start without a valid connection string.
+{{- end }}
+{{- end }}
+
+{{- if eq .Values.broker.type "azureservicebus" }}
+{{- if and (not .Values.broker.azureServiceBus.existingSecret) (not .Values.broker.azureServiceBus.connectionString) (not .Values.broker.azureServiceBus.namespace) }}
+
+WARNING: No Azure Service Bus credentials configured!
+  Set one of:
+    - broker.azureServiceBus.connectionString (or existingSecret)
+    - broker.azureServiceBus.namespace (for managed-identity auth)
+  The operator will fail to start without credentials.
+{{- end }}
+{{- end }}
+
+To create a ResendPolicy:
+
+  cat <<EOF | kubectl apply -f -
+  apiVersion: messaging.intropy.io/v1
+  kind: ResendPolicy
+  metadata:
+    name: my-queue
+    namespace: {{ .Release.Namespace }}
+  spec:
+    queueName: my-queue
+  EOF
+
+To check operator logs:
+
+  kubectl logs -n {{ .Release.Namespace }} deploy/{{ include "message-resender.fullname" . }} -f
+
+{{- if .Values.manager.watchNamespaces }}
+
+Namespace-scoped mode: watching {{ .Values.manager.watchNamespaces }}
+RoleBindings have been created in each watched namespace.
+{{- else }}
+
+Cluster-wide mode: watching all namespaces.
+{{- end }}
+
+{{- if .Values.metrics.enabled }}
+
+Metrics: {{ if .Values.metrics.secure }}HTTPS{{ else }}HTTP{{ end }} on port {{ .Values.metrics.service.port }}
+{{- if .Values.metrics.serviceMonitor.enabled }}
+A ServiceMonitor has been created for Prometheus Operator.
+{{- end }}
+{{- end }}
+
+CRDs are managed by Helm's crds/ directory and will NOT be deleted on
+helm uninstall. To upgrade CRDs manually:
+
+  kubectl apply -f charts/message-resender/crds/

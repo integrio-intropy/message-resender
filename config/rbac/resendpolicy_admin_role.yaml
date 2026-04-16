@@ -1,0 +1,27 @@
+# This rule is not used by the project message-resender itself.
+# It is provided to allow the cluster admin to help manage permissions for users.
+#
+# Grants full permissions ('*') over messaging.intropy.io.
+# This role is intended for users authorized to modify roles and bindings within the cluster,
+# enabling them to delegate specific permissions to other users or groups as needed.
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: message-resender
+    app.kubernetes.io/managed-by: kustomize
+  name: resendpolicy-admin-role
+rules:
+- apiGroups:
+  - messaging.intropy.io
+  resources:
+  - resendpolicies
+  verbs:
+  - '*'
+- apiGroups:
+  - messaging.intropy.io
+  resources:
+  - resendpolicies/status
+  verbs:
+  - get

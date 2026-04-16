@@ -1,0 +1,190 @@
+# -- Number of operator replicas. Typically 1; use leaderElection with >1.
+replicaCount: 1
+
+image:
+  # -- Container image repository
+  repository: harbor.intropy.io/platform/message-resender
+  # -- Image pull policy
+  pullPolicy: IfNotPresent
+  # -- Overrides the image tag (default is the chart appVersion)
+  tag: ""
+
+# -- Image pull secrets for private registries
+imagePullSecrets: []
+
+# -- Override the release name prefix
+nameOverride: ""
+# -- Override the full release name
+fullnameOverride: ""
+
+serviceAccount:
+  # -- Whether to create the ServiceAccount
+  create: true
+  # -- Annotations to add to the ServiceAccount (e.g. for IRSA/Workload Identity)
+  annotations: {}
+  # -- Override the ServiceAccount name (default: fullname)
+  name: ""
+
+# -- Annotations to add to the operator Pod
+podAnnotations: {}
+
+# -- Labels to add to the operator Pod
+podLabels: {}
+
+# ---- Broker Configuration ----
+
+broker:
+  # -- Broker type: "rabbitmq" or "azureservicebus"
+  type: rabbitmq
+
+  rabbitmq:
+    # -- RabbitMQ DSN (amqp://user:pass@host:port/vhost).
+    # Ignored unless broker.type=rabbitmq.
+    # Prefer using existingSecret for production.
+    dsn: ""
+    # -- Use an existing Secret for the RabbitMQ DSN
+    existingSecret: ""
+    # -- Key inside the existing Secret that holds the DSN
+    secretKey: "dsn"
+
+  azureServiceBus:
+    # -- Azure Service Bus connection string.
+    # Mutually exclusive with namespace (managed identity).
+    connectionString: ""
+    # -- Fully-qualified ASB namespace (e.g. mynamespace.servicebus.windows.net)
+    # for managed-identity auth. Mutually exclusive with connectionString.
+    namespace: ""
+    # -- Use an existing Secret for the connection string
+    existingSecret: ""
+    # -- Key inside the existing Secret that holds the connection string
+    secretKey: "connection-string"
+
+# ---- Manager Flags ----
+
+manager:
+  # -- Default DLQ name prefix (RabbitMQ only)
+  dlqPrefix: "dlq-"
+  # -- Interval between drain runs per queue
+  drainInterval: "5m"
+  # -- Maximum concurrent drain operations
+  maxConcurrentDrains: 10
+  # -- Log level (debug, info, warn, error)
+  logLevel: "info"
+  # -- Comma-separated list of namespaces to watch.
+  # Empty string means cluster-wide (ClusterRoleBinding created).
+  # Non-empty means namespace-scoped (RoleBinding per namespace).
+  watchNamespaces: ""
+  # -- Enable leader election (recommended when replicaCount > 1)
+  leaderElect: false
+  # -- Enable HTTP/2 for metrics and webhook servers
+  enableHTTP2: false
+
+# ---- Metrics ----
+
+metrics:
+  # -- Enable the metrics endpoint
+  enabled: true
+  # -- Address the metrics endpoint binds to
+  bindAddress: ":8443"
+  # -- Serve metrics over HTTPS (true) or HTTP (false)
+  secure: false
+
+  service:
+    # -- Metrics service port
+    port: 8443
+    # -- Metrics service type
+    type: ClusterIP
+    # -- Additional annotations for the metrics Service
+    annotations: {}
+
+  serviceMonitor:
+    # -- Deploy a ServiceMonitor for Prometheus Operator
+    enabled: false
+    # -- Additional labels on the ServiceMonitor (e.g. release: prometheus)
+    additionalLabels: {}
+    # -- Scrape interval override
+    interval: ""
+    # -- Scrape timeout override
+    scrapeTimeout: ""
+    # -- Scheme override (auto-detects from metrics.secure if empty)
+    scheme: ""
+    # -- TLS config for the ServiceMonitor
+    tlsConfig:
+      insecureSkipVerify: true
+    # -- Bearer token file path for ServiceMonitor auth
+    bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+# ---- Health Probes ----
+
+healthProbes:
+  # -- Address the health/ready probe endpoint binds to
+  bindAddress: ":8081"
+  liveness:
+    initialDelaySeconds: 15
+    periodSeconds: 20
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+
+# ---- RBAC ----
+
+rbac:
+  # -- Create ClusterRole and bindings for the manager
+  create: true
+  aggregatedClusterRoles:
+    # -- Create admin/editor/viewer ClusterRoles for cluster admins
+    enabled: false
+
+# ---- Network Policy ----
+
+networkPolicy:
+  # -- Deploy a NetworkPolicy restricting metrics ingress
+  enabled: false
+  # -- Namespace selector labels that are allowed to scrape metrics
+  ingressNamespaceSelector:
+    metrics: enabled
+
+# ---- Pod Spec ----
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 128Mi
+  requests:
+    cpu: 10m
+    memory: 64Mi
+
+# -- Node selector for pod scheduling
+nodeSelector: {}
+
+# -- Tolerations for pod scheduling
+tolerations: []
+
+# -- Affinity rules for pod scheduling
+affinity: {}
+
+# -- Pod-level security context
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+# -- Container-level security context
+securityContext:
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+# -- Additional environment variables on the manager container
+extraEnv: []
+
+# -- Additional volumes on the pod
+extraVolumes: []
+
+# -- Additional volume mounts on the manager container
+extraVolumeMounts: []
+
+# -- terminationGracePeriodSeconds for the pod
+terminationGracePeriodSeconds: 10

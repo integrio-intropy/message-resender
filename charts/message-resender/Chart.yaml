@@ -1,0 +1,22 @@
+apiVersion: v2
+name: message-resender
+description: >-
+  A Kubernetes operator that drains dead-letter queues and republishes messages
+  to their origin queues. Supports RabbitMQ and Azure Service Bus.
+type: application
+version: 0.0.0-dev
+appVersion: "0.0.0-dev"
+kubeVersion: ">=1.26.0-0"
+home: https://github.com/integrio-intropy/message-resender
+sources:
+  - https://github.com/integrio-intropy/message-resender
+maintainers:
+  - name: Intropy
+keywords:
+  - kubernetes
+  - operator
+  - rabbitmq
+  - azure-service-bus
+  - dead-letter-queue
+  - dlq
+  - message-resender

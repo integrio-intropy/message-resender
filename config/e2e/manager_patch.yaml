@@ -1,0 +1,16 @@
+- op: replace
+  path: /spec/template/spec/containers/0/args
+  value:
+  - --leader-elect
+  - --health-probe-bind-address=:8081
+  - --metrics-bind-address=:8443
+  - --metrics-secure=false
+  - --broker-type=rabbitmq
+  - --dlq-prefix=dlq-
+  - --drain-interval=5s
+  - --watch-namespaces=message-resender-system,resend-watched
+- op: replace
+  path: /spec/template/spec/containers/0/env
+  value:
+  - name: RABBITMQ_DSN
+    value: amqp://guest:guest@rabbitmq.message-resender-system.svc.cluster.local:5672/

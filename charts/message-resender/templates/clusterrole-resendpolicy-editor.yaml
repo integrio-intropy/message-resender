@@ -1,0 +1,16 @@
+{{- if and .Values.rbac.create .Values.rbac.aggregatedClusterRoles.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "message-resender.fullname" . }}-resendpolicy-editor
+  labels:
+    {{- include "message-resender.labels" . | nindent 4 }}
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+rules:
+  - apiGroups: [messaging.intropy.io]
+    resources: [resendpolicies]
+    verbs: [create, delete, get, list, patch, update, watch]
+  - apiGroups: [messaging.intropy.io]
+    resources: [resendpolicies/status]
+    verbs: [get]
+{{- end }}

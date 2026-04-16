@@ -1,0 +1,128 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "message-resender.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "message-resender.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "message-resender.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "message-resender.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "message-resender.serviceAccountName" . }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: manager
+          image: {{ include "message-resender.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - /manager
+          args:
+            {{- if .Values.manager.leaderElect }}
+            - --leader-elect
+            {{- end }}
+            - --health-probe-bind-address={{ .Values.healthProbes.bindAddress }}
+            {{- if .Values.metrics.enabled }}
+            - --metrics-bind-address={{ .Values.metrics.bindAddress }}
+            - --metrics-secure={{ .Values.metrics.secure }}
+            {{- else }}
+            - --metrics-bind-address=0
+            {{- end }}
+            - --broker-type={{ .Values.broker.type }}
+            {{- if and (eq .Values.broker.type "rabbitmq") .Values.manager.dlqPrefix }}
+            - --dlq-prefix={{ .Values.manager.dlqPrefix }}
+            {{- end }}
+            - --drain-interval={{ .Values.manager.drainInterval }}
+            - --max-concurrent-drains={{ .Values.manager.maxConcurrentDrains }}
+            {{- if .Values.manager.watchNamespaces }}
+            - --watch-namespaces={{ .Values.manager.watchNamespaces }}
+            {{- end }}
+            {{- if .Values.manager.enableHTTP2 }}
+            - --enable-http2=true
+            {{- end }}
+            - --zap-log-level={{ .Values.manager.logLevel }}
+          env:
+            {{- if eq .Values.broker.type "rabbitmq" }}
+            {{- $secretName := include "message-resender.brokerSecretName" . | trim }}
+            {{- if $secretName }}
+            - name: RABBITMQ_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: {{ .Values.broker.rabbitmq.secretKey }}
+            {{- end }}
+            {{- end }}
+            {{- if eq .Values.broker.type "azureservicebus" }}
+            {{- $secretName := include "message-resender.brokerSecretName" . | trim }}
+            {{- if $secretName }}
+            - name: ASB_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: {{ .Values.broker.azureServiceBus.secretKey }}
+            {{- end }}
+            {{- if .Values.broker.azureServiceBus.namespace }}
+            - name: ASB_NAMESPACE
+              value: {{ .Values.broker.azureServiceBus.namespace | quote }}
+            {{- end }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports: []
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: {{ .Values.healthProbes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.healthProbes.liveness.periodSeconds }}
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: {{ .Values.healthProbes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.healthProbes.readiness.periodSeconds }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- with .Values.extraVolumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.extraVolumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

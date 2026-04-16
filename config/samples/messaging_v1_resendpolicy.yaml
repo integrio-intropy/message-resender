@@ -1,0 +1,9 @@
+apiVersion: messaging.intropy.io/v1
+kind: ResendPolicy
+metadata:
+  labels:
+    app.kubernetes.io/name: message-resender
+    app.kubernetes.io/managed-by: kustomize
+  name: orders
+spec:
+  queueName: orders

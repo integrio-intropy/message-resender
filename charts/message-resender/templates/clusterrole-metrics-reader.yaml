@@ -1,0 +1,11 @@
+{{- if and .Values.rbac.create .Values.metrics.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "message-resender.fullname" . }}-metrics-reader
+  labels:
+    {{- include "message-resender.labels" . | nindent 4 }}
+rules:
+  - nonResourceURLs: ["/metrics"]
+    verbs: [get]
+{{- end }}

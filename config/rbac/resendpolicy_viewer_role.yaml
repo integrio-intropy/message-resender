@@ -1,0 +1,29 @@
+# This rule is not used by the project message-resender itself.
+# It is provided to allow the cluster admin to help manage permissions for users.
+#
+# Grants read-only access to messaging.intropy.io resources.
+# This role is intended for users who need visibility into these resources
+# without permissions to modify them. It is ideal for monitoring purposes and limited-access viewing.
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: message-resender
+    app.kubernetes.io/managed-by: kustomize
+  name: resendpolicy-viewer-role
+rules:
+- apiGroups:
+  - messaging.intropy.io
+  resources:
+  - resendpolicies
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - messaging.intropy.io
+  resources:
+  - resendpolicies/status
+  verbs:
+  - get
