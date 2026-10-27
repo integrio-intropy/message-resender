@@ -10,6 +10,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
 	"github.com/go-logr/logr"
+	"k8s.io/klog/v2"
 
 	"github.com/integrio-intropy/message-resender/internal/broker"
 )
@@ -155,7 +156,7 @@ func drain(
 
 			if msg.EnqueuedTime == nil || !msg.EnqueuedTime.Truncate(time.Second).Before(runStart.Truncate(time.Second)) {
 				log.Info("Reached message from current window, stopping",
-					"enqueuedTime", msg.EnqueuedTime, "runStart", runStart)
+					"enqueuedTime", klog.SafePtr(msg.EnqueuedTime), "runStart", runStart)
 				// Under PeekLock, not completing returns the message to the DLQ.
 				return result, nil
 			}
