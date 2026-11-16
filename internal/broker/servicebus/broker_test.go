@@ -2,6 +2,7 @@ package servicebus
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -314,9 +315,8 @@ func TestDrain_PreservesMessageProperties(t *testing.T) {
 	if val, ok := sent.ApplicationProperties["custom-key"]; !ok || val != "custom-value" {
 		t.Errorf("expected custom-key preserved, got %v", sent.ApplicationProperties)
 	}
-	// retry_count should be added.
-	if val, ok := sent.ApplicationProperties[retryCountPropertyName]; !ok || val != 1 {
-		t.Errorf("expected retry_count=1, got %v", sent.ApplicationProperties[retryCountPropertyName])
+	if string(sent.Body) != `{"id":1}` {
+		t.Errorf("expected non-CloudEvent body unchanged, got %s", sent.Body)
 	}
 }
 
@@ -368,35 +368,61 @@ func TestParseQueueName_TopicSubscription(t *testing.T) {
 	}
 }
 
-func TestGetRetryCount_NoProperty(t *testing.T) {
-	msg := &azservicebus.ReceivedMessage{}
-	count := getRetryCount(msg)
-	if count != 1 {
-		t.Errorf("expected 1, got %d", count)
-	}
-}
-
-func TestGetRetryCount_ExistingCount(t *testing.T) {
+func TestMapMessage_SetsCloudEventRetryCount(t *testing.T) {
 	msg := &azservicebus.ReceivedMessage{
-		ApplicationProperties: map[string]any{
-			retryCountPropertyName: int64(3),
-		},
-	}
-	count := getRetryCount(msg)
-	if count != 4 {
-		t.Errorf("expected 4 (3+1), got %d", count)
-	}
-}
-
-func TestMapMessage_AddsRetryCount(t *testing.T) {
-	msg := &azservicebus.ReceivedMessage{
-		Body:      []byte(`{"id":1}`),
+		Body:      []byte(`{"specversion":"1.0","id":"evt-1","source":"orders","type":"order.created","data":{"note":"a<b&c","amount":1.50}}`),
 		MessageID: "msg-1",
 	}
 
 	mapped := mapMessage(msg)
 
-	if val, ok := mapped.ApplicationProperties[retryCountPropertyName]; !ok || val != 1 {
-		t.Errorf("expected retry_count=1, got %v", mapped.ApplicationProperties)
+	var event map[string]json.RawMessage
+	if err := json.Unmarshal(mapped.Body, &event); err != nil {
+		t.Fatalf("expected JSON body, got %s: %v", mapped.Body, err)
+	}
+	if got := string(event[retryCountExtensionName]); got != "1" {
+		t.Errorf("expected retrycount=1, got %q", got)
+	}
+	if got := string(event["data"]); got != `{"note":"a<b&c","amount":1.50}` {
+		t.Errorf("expected data preserved byte for byte, got %s", got)
+	}
+	for _, attr := range []string{"specversion", "id", "source", "type"} {
+		if _, ok := event[attr]; !ok {
+			t.Errorf("expected attribute %q preserved, got %s", attr, mapped.Body)
+		}
+	}
+}
+
+func TestMapMessage_IncrementsCloudEventRetryCount(t *testing.T) {
+	msg := &azservicebus.ReceivedMessage{
+		Body:      []byte(`{"specversion":"1.0","id":"evt-1","retrycount":1}`),
+		MessageID: "msg-1",
+	}
+
+	mapped := mapMessage(msg)
+
+	var event map[string]json.RawMessage
+	if err := json.Unmarshal(mapped.Body, &event); err != nil {
+		t.Fatalf("expected JSON body, got %s: %v", mapped.Body, err)
+	}
+	if got := string(event[retryCountExtensionName]); got != "2" {
+		t.Errorf("expected retrycount=2, got %q", got)
+	}
+}
+
+func TestMapMessage_NonCloudEventBodyUnchanged(t *testing.T) {
+	bodies := map[string][]byte{
+		"plain JSON object": []byte(`{"id":1,  "name":"x"}`),
+		"JSON array":        []byte(`[{"specversion":"1.0"}]`),
+		"not JSON":          []byte(`<order id="1"/>`),
+		"empty":             nil,
+	}
+	for name, body := range bodies {
+		t.Run(name, func(t *testing.T) {
+			mapped := mapMessage(&azservicebus.ReceivedMessage{Body: body, MessageID: "msg-1"})
+			if string(mapped.Body) != string(body) {
+				t.Errorf("expected body unchanged, got %s", mapped.Body)
+			}
+		})
 	}
 }

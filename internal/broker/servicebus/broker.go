@@ -1,7 +1,9 @@
 package servicebus
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -16,8 +18,13 @@ import (
 )
 
 const (
-	retryCountPropertyName = "retry_count"
-	receiveTimeout         = 10 * time.Second
+	// retryCountExtensionName is the CloudEvent extension that consumers read
+	// to detect a retry. Dapr only exposes extensions from the CloudEvent in
+	// the message body, not from Service Bus application properties, and
+	// extension names cannot contain underscores.
+	retryCountExtensionName = "retrycount"
+	cloudEventSpecVersion   = "specversion"
+	receiveTimeout          = 10 * time.Second
 )
 
 // messageReceiver abstracts the subset of *azservicebus.Receiver used by drain.
@@ -181,18 +188,13 @@ func drain(
 	return result, nil
 }
 
-// mapMessage builds a new ASB message preserving the original's properties
-// and adding a retry_count application property.
+// mapMessage builds a new ASB message preserving the original's properties.
+// When the body is a structured CloudEvent, the retrycount extension is set
+// so the consumer sees the message as a retry.
 func mapMessage(msg *azservicebus.ReceivedMessage) *azservicebus.Message {
-	appProps := msg.ApplicationProperties
-	if appProps == nil {
-		appProps = make(map[string]any)
-	}
-	appProps[retryCountPropertyName] = getRetryCount(msg)
-
 	return &azservicebus.Message{
-		ApplicationProperties: appProps,
-		Body:                  msg.Body,
+		ApplicationProperties: msg.ApplicationProperties,
+		Body:                  setCloudEventRetryCount(msg.Body),
 		ContentType:           msg.ContentType,
 		CorrelationID:         msg.CorrelationID,
 		MessageID:             &msg.MessageID,
@@ -204,14 +206,38 @@ func mapMessage(msg *azservicebus.ReceivedMessage) *azservicebus.Message {
 	}
 }
 
-func getRetryCount(msg *azservicebus.ReceivedMessage) int {
-	if msg.ApplicationProperties == nil {
-		return 1
+// parseCloudEvent decodes body as a structured-mode JSON CloudEvent. It
+// reports false when the body is not a JSON object with a specversion
+// attribute.
+func parseCloudEvent(body []byte) (map[string]json.RawMessage, bool) {
+	var event map[string]json.RawMessage
+	if err := json.Unmarshal(body, &event); err != nil {
+		return nil, false
 	}
-	if val, exists := msg.ApplicationProperties[retryCountPropertyName]; exists {
-		if count, ok := val.(int64); ok {
-			return int(count) + 1
-		}
+	if _, ok := event[cloudEventSpecVersion]; !ok {
+		return nil, false
 	}
-	return 1
+	return event, true
+}
+
+// setCloudEventRetryCount returns body with the retrycount extension set to
+// one more than its current value (or 1) when body is a structured
+// CloudEvent, and body unchanged otherwise. Other attributes and data are
+// kept as-is, though key order and whitespace may change.
+func setCloudEventRetryCount(body []byte) []byte {
+	event, ok := parseCloudEvent(body)
+	if !ok {
+		return body
+	}
+	retryCount := 0
+	_ = json.Unmarshal(event[retryCountExtensionName], &retryCount)
+	event[retryCountExtensionName] = json.RawMessage(fmt.Sprint(retryCount + 1))
+
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(event); err != nil {
+		return body
+	}
+	return bytes.TrimSuffix(buf.Bytes(), []byte("\n"))
 }
